@@ -5,25 +5,33 @@ Carried over from recon + planning. Paste this into your first Claude Code / Cop
 ## Scope decisions made so far
 - Targets: **Claude Code** and **GitHub Copilot CLI** only — not caveman's full 30+-tool portability.
 - Two skills planned overall, budget first: (1) token/cost budget control, (2) team code-style/craftsmanship enforcement for LLM-generated code (motivated by non-engineers on the team producing code that doesn't match team quality bar) — **skill 2 is still parked, not started.**
-- The budget skill splits into **two separate repos**, not one project (see below).
+- The budget skill lives in **one repo** (this one), not two — combined 2026-08-09; the original two-repo split is deferred, not eliminated (see below).
 - Build order within the budget skill, in priority: **measure → route → compress**. Compression (caveman-speak) is explicitly last/optional (see "why caveman's content doesn't transfer" below for the full reasoning).
 
-## Repo split & naming (locked)
+## Repo structure & naming (revised 2026-08-09 — combined for now, split deferred)
 
-Two repos, not one:
+One repo (this one), not two. Both components land as top-level folders:
 
-| Repo | Component | Audience / rollout |
+| Component | Folder | Audience / rollout |
 |---|---|---|
-| **`quartermaster-ledger`** | Consumption reporting (component 1) | Team-wide. Read-only observability, no behavior change — a good candidate for Copilot CLI's enterprise-managed plugin push once proven. |
-| **`quartermaster-crew`** | Subagent-routing agents (component 2) | Personal, opinionated technique. Changes how you work, so it stays an opt-in power tool, not something to blanket-push to the team before it's proven. |
+| **Ledger** (`quartermaster-ledger`, component 1) | `ledger/` | Team-wide. Read-only observability, no behavior change — a good candidate for Copilot CLI's enterprise-managed plugin push once proven. |
+| **Crew** (`quartermaster-crew`, component 2) | `crew/` | Personal, opinionated technique. Changes how you work, so it stays an opt-in power tool, not something to blanket-push to the team before it's proven. |
 
-Why split rather than one repo: the two components have genuinely different maturity curves and rollout paths — bundling them means holding back the low-risk one until the experimental one is also team-ready, or shipping experimental behavior to people who didn't ask for it.
+**Why revised:** the original split's actual justification was audience separation (team-wide push vs. personal opt-in), which is a packaging/distribution concern, not a repo-boundary one — caveman itself proves this with one canonical `skills/` source producing multiple generated distribution artifacts (`plugins/caveman/`, `dist/caveman.skill`). The split's cost — duplicated "detect Claude Code vs. Copilot CLI, write to the right config path" plumbing across two repos — was concrete and immediate; its benefit wasn't load-bearing yet, since there's one maintainer and zero external consumers of either component today. Ledger stays independently releasable via folder-scoped packaging/versioning, so "don't hold back the low-risk component for the experimental one" is still satisfied without two git remotes. Splitting `crew/` out later, once it has a real second install target, is a cheap mechanical extraction; merging two independently-versioned histories back together is not — so the safer default under uncertainty was to start joined.
 
-The cost of splitting: both repos need the same "detect Claude Code vs. Copilot CLI, write to the right config path" plumbing. Decision: **duplicate it for now**, don't extract a third shared-core repo — that's premature structure for two repos with one maintainer. Revisit extraction only if the duplication starts actually hurting.
+**Trigger to revisit the split:** `crew/` gets a real second install target, or a genuinely divergent tooling need (its own CI/eval harness, a release cadence tied to Copilot CLI subagent APIs that don't exist yet) — not before.
 
-Skill 2 (style/craftsmanship, still parked) doesn't have a locked name yet. Candidate personas discussed, to keep the family coherent under the Quartermaster umbrella when it starts: **Foreman** or **Smith**.
+**Superseded reasoning (kept for record, no longer the operative decision):**
 
-## Component 1 — `quartermaster-ledger` (build first, on Copilot CLI)
+> Why split rather than one repo: the two components have genuinely different maturity curves and rollout paths — bundling them means holding back the low-risk one until the experimental one is also team-ready, or shipping experimental behavior to people who didn't ask for it.
+>
+> The cost of splitting: both repos need the same "detect Claude Code vs. Copilot CLI, write to the right config path" plumbing. Decision: duplicate it for now, don't extract a third shared-core repo — that's premature structure for two repos with one maintainer. Revisit extraction only if the duplication starts actually hurting.
+
+That plumbing now lives once, shared internally between `ledger/` and `crew/` — the cost the original decision accepted no longer applies.
+
+Skill 2 (style/craftsmanship, still parked) doesn't have a locked name yet. Candidate personas discussed, to keep the family coherent under the Quartermaster umbrella when it starts: **Foreman** or **Smith**. If it starts, evaluate then whether it lands in this repo too or gets its own — don't assume either way yet.
+
+## Component 1 — `ledger/` (`quartermaster-ledger`, build first, on Copilot CLI)
 
 Copilot CLI already exposes real, server-reported usage data:
 - `~/.copilot/session-state/<session-id>/events.jsonl` — `session.shutdown.modelMetrics.*` includes actual per-model token counts and AI-credit cost.
@@ -39,7 +47,7 @@ Target for a first version: a `sessionEnd` hook that appends `{session_id, token
 
 **Then port to Claude Code**, accepting it'll be an estimate, not exact — there's no hook-accessible token data there (open issue `anthropics/claude-code#52089`: hooks get session context but no token counts, and nothing is written to an accessible file either). Approach: local tokenizer estimate over what the `Stop` hook can see, same caveat caveman's own `evals/measure.py` carries ("ratios meaningful, absolute numbers approximate"). Surface in the UI that this number is approximate on Claude Code and exact on Copilot CLI — don't let the two look equally authoritative.
 
-## Component 2 — `quartermaster-crew` (build second, on Claude Code)
+## Component 2 — `crew/` (`quartermaster-crew`, build second, on Claude Code)
 
 Direct adaptation of caveman's `cavecrew` pattern (already read in full during recon):
 - Investigation/location work → cheap model (haiku), strict output contract (`path:line — symbol — note`), refuses to suggest fixes.
@@ -65,7 +73,7 @@ Kept here because it's the reasoning behind deprioritizing component 3 (prose co
 
 ## Not started yet
 
-- Component 3 (prose compression, under whichever repo it ends up in) — deprioritized, build only if components 1 and 2 don't move the number enough.
+- Component 3 (prose compression, under whichever repo or folder it ends up in) — deprioritized, build only if components 1 and 2 don't move the number enough.
 - Skill 2 (style/craftsmanship enforcement) — parked until the budget skill is prototyped. When it starts: the hard part isn't the hook/subagent plumbing (borrow `cavecrew-reviewer`'s contract shape), it's turning the team's implicit conventions into concrete, example-anchored do/don't rules the way caveman did per intensity level — that's the work that actually determines whether it's useful.
 
 ## Reference
